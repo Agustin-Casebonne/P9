@@ -3,6 +3,8 @@ name: CI Pipeline
 on:
   push:
     branches: [master]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 
 jobs:
@@ -74,6 +76,50 @@ jobs:
         with:
           name: jacoco-report
           path: target/site/jacoco/
+
+      - name: Resumen de version (solo rama master)
+        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+        run: |
+          echo "### Build de master" >> $GITHUB_STEP_SUMMARY
+          echo "- Coordenadas: ${{ needs.archetype.outputs.group }}:${{ needs.archetype.outputs.artifact }}:${{ needs.archetype.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${GITHUB_SHA::7}" >> $GITHUB_STEP_SUMMARY
+          echo "JAR de master listo para publicar"
+
+      - name: Aviso de pull request (solo PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "PR #${{ github.event.pull_request.number }}: ${{ github.head_ref }} -> ${{ github.base_ref }}"
+          echo "El JAR de esta PR no se publica; solo se valida."
+
+  test-matrix:
+    needs: archetype
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+        distribution: [temurin, zulu]
+    runs-on: ${{ matrix.os }}
+    name: test (${{ matrix.os }}, ${{ matrix.distribution }})
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (${{ matrix.distribution }})
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: ${{ matrix.distribution }}
+
+      - name: Restaurar caché de dependencias
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-dependencies-${{ needs.archetype.outputs.artifact }}-${{ needs.archetype.outputs.version }}
+
+      - name: Ejecutar tests
+        run: |
+          java -version
+          mvn -B test
 
   coverage-check:
     runs-on: ubuntu-22.04
