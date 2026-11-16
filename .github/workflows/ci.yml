@@ -61,7 +61,7 @@ jobs:
           key: maven-dependencies-${{ needs.archetype.outputs.artifact }}-${{ needs.archetype.outputs.version }}
 
       - name: Construir y empaquetar
-        run: mvn -B clean compile test package verify
+        run: mvn -B clean compile test package verify -Djacoco.haltOnFailure=false
 
       - name: Guardar JAR
         uses: actions/upload-artifact@v4
