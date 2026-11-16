@@ -45,6 +45,22 @@ public class GraphContainerTest {
 		);
 	}
 
+	@Test
+	void testWeightWithUnknownVertex() {
+		assertThrows(IllegalArgumentException.class, () ->
+				graphContainer.pathWeightBetween("Z", "A")
+		);
+	}
+
+	@Test
+	void testUnreachableVertex() {
+		Graph<String, DefaultEdge> graph = mockGraph();
+		graph.addVertex("E");
+		GraphContainer container = new GraphContainer(graph);
+		assertThrows(IllegalArgumentException.class, () -> container.shortestPathBetween("A", "E"));
+		assertThrows(IllegalArgumentException.class, () -> container.pathWeightBetween("A", "E"));
+	}
+
 	private GraphLoader mockGraphLoader() throws IOException {
 		GraphLoader graphLoader = mock(GraphLoader.class);
 		when(graphLoader.load()).thenReturn(new GraphContainer(mockGraph()));
