@@ -136,6 +136,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: use-reusable
     steps:
-      - name: Mostrar salida del flujo reutilizable (sintaxis del enunciado)
+      - name: Mostrar salida del flujo reutilizable
         run: |
-          echo "Resultado: ${{ jobs.use-reusable.outputs.result }}"
+          echo "Resultado: ${{ needs.use-reusable.outputs.result }}"
