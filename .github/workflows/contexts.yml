@@ -1,0 +1,140 @@
+name: Contextos de GitHub Actions
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/contexts.yml'
+      - '.github/workflows/reusable-saludo.yml'
+  workflow_dispatch:
+    inputs:
+      entorno:
+        description: "Entorno de despliegue"
+        required: true
+        type: choice
+        options: [desarrollo, produccion]
+        default: desarrollo
+      nivel_log:
+        description: "Nivel de detalle del log"
+        required: true
+        type: choice
+        options: [info, debug]
+        default: info
+      ejecutar_matriz:
+        description: "Ejecutar el job con matriz de sistemas operativos"
+        type: boolean
+        default: true
+      usuario:
+        description: "Nombre que se envía al flujo reutilizable"
+        type: string
+        default: Invitado
+
+env:
+  APP_NAME: contextos-demo
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Diagnóstico seguro (solo campos no sensibles)
+        env:
+          REPO: ${{ github.repository }}
+          EVENTO: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          FLUJO: ${{ github.workflow }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+          ACTOR: ${{ github.actor }}
+          SO: ${{ runner.os }}
+          ARQ: ${{ runner.arch }}
+          TEMP_DIR: ${{ runner.temp }}
+          TOOL_CACHE: ${{ runner.tool_cache }}
+          API: ${{ vars.API_ENDPOINT }}
+        run: |
+          echo "== github =="
+          echo "Repositorio:  $REPO"
+          echo "Evento:       $EVENTO"
+          echo "Referencia:   $REF"
+          echo "Commit:       ${SHA::7}"
+          echo "Workflow:     $FLUJO"
+          echo "Ejecución:    id=$RUN_ID número=$RUN_NUMBER"
+          echo "Actor:        $ACTOR"
+          echo "== runner =="
+          echo "SO=$SO  Arquitectura=$ARQ"
+          echo "Temporal:     $TEMP_DIR"
+          echo "Tool cache:   $TOOL_CACHE"
+          echo "== env / vars / job =="
+          echo "APP_NAME:     $APP_NAME"
+          echo "API_ENDPOINT: ${API:-(no definida)}"
+          echo "job.status:   ${{ job.status }}"
+
+      - name: Comprobar el secreto sin mostrarlo
+        env:
+          TOKEN: ${{ secrets.DEMO_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "DEMO_TOKEN: configurado (valor no mostrado)"
+          else
+            echo "DEMO_TOKEN: no configurado"
+          fi
+
+      - name: Claves del contexto github (sin valores)
+        env:
+          GH_CTX: ${{ toJSON(github) }}
+        run: echo "$GH_CTX" | jq -r 'keys | join(", ")'
+
+  pasos:
+    runs-on: ubuntu-latest
+    steps:
+      - id: genera
+        name: Generar un output con GITHUB_OUTPUT
+        run: echo "dato=Hola, mundo" >> "$GITHUB_OUTPUT"
+
+      - id: legado
+        name: Generar un output con set-output (sintaxis del enunciado)
+        run: echo "::set-output name=dato::Hola desde set-output"
+
+      - name: Leer los outputs anteriores
+        run: |
+          echo "genera.outputs.dato = ${{ steps.genera.outputs.dato }}"
+          echo "legado.outputs.dato = ${{ steps.legado.outputs.dato }}"
+
+      - id: falla
+        name: Paso que falla con continue-on-error
+        run: exit 1
+        continue-on-error: true
+
+      - name: Si conclusion == failure
+        if: ${{ steps.falla.conclusion == 'failure' }}
+        run: echo "El paso anterior falló (conclusion)."
+
+      - name: Si outcome == failure
+        if: ${{ steps.falla.outcome == 'failure' }}
+        run: echo "El paso anterior falló (outcome)."
+
+      - name: Mostrar conclusion y outcome
+        run: echo "conclusion=${{ steps.falla.conclusion }} outcome=${{ steps.falla.outcome }}"
+
+  matriz:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Mostrar la estrategia (sintaxis del enunciado)
+        run: |
+          echo "Sistema operativo: ${{ strategy.os }}"
+          echo "matrix.os: ${{ matrix.os }}"
+
+  use-reusable:
+    uses: ./.github/workflows/reusable-saludo.yml
+    with:
+      input_value: ${{ inputs.usuario || 'push automático' }}
+
+  show-output:
+    runs-on: ubuntu-latest
+    needs: use-reusable
+    steps:
+      - name: Mostrar salida del flujo reutilizable (sintaxis del enunciado)
+        run: echo "Resultado: ${{ jobs.use-reusable.outputs.result }}"

@@ -1,0 +1,21 @@
+name: Reusable - saludo
+
+on:
+  workflow_call:
+    inputs:
+      input_value:
+        required: true
+        type: string
+    outputs:
+      result:
+        description: "Mensaje generado por el flujo reutilizable"
+        value: ${{ jobs.generate-output.outputs.result }}
+
+jobs:
+  generate-output:
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.set-output.outputs.result }}
+    steps:
+      - id: set-output
+        run: echo "result=Recibido -> ${{ inputs.input_value }}" >> "$GITHUB_OUTPUT"
