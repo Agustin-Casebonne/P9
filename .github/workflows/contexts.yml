@@ -28,6 +28,10 @@ on:
         description: "Nombre que se envía al flujo reutilizable"
         type: string
         default: Invitado
+      demo_secreto:
+        description: "Demostrar el enmascarado de secretos (usa un secreto ficticio)"
+        type: boolean
+        default: false
 
 env:
   APP_NAME: contextos-demo
@@ -79,10 +83,16 @@ jobs:
             echo "DEMO_TOKEN: no configurado"
           fi
 
-      - name: Claves del contexto github (sin valores)
+      - name: Claves del evento (sin valores)
+        run: jq -r 'keys | join(", ")' "$GITHUB_EVENT_PATH"
+
+      - name: Demostración de enmascarado (secreto ficticio)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.demo_secreto }}
         env:
-          GH_CTX: ${{ toJSON(github) }}
-        run: echo "$GH_CTX" | jq -r 'keys | join(", ")'
+          TOKEN: ${{ secrets.DEMO_TOKEN }}
+        run: |
+          echo "Valor directo:   $TOKEN"
+          echo "Valor invertido: $(echo "$TOKEN" | rev)"
 
   pasos:
     runs-on: ubuntu-latest
@@ -92,8 +102,8 @@ jobs:
         run: echo "dato=Hola, mundo" >> "$GITHUB_OUTPUT"
 
       - id: legado
-        name: Generar un output con set-output (sintaxis del enunciado)
-        run: echo "::set-output name=dato::Hola desde set-output"
+        name: Generar un segundo output (antes set-output)
+        run: echo "dato=Hola desde el segundo paso" >> "$GITHUB_OUTPUT"
 
       - name: Leer los outputs anteriores
         run: |
@@ -116,16 +126,74 @@ jobs:
       - name: Mostrar conclusion y outcome
         run: echo "conclusion=${{ steps.falla.conclusion }} outcome=${{ steps.falla.outcome }}"
 
+  preparar:
+    runs-on: ubuntu-latest
+    outputs:
+      entorno: ${{ steps.config.outputs.entorno }}
+      replicas: ${{ steps.config.outputs.replicas }}
+      debug: ${{ steps.config.outputs.debug }}
+    steps:
+      - id: config
+        name: Calcular la configuración a partir de los inputs
+        env:
+          ENTORNO: ${{ inputs.entorno || 'desarrollo' }}
+          NIVEL: ${{ inputs.nivel_log || 'info' }}
+        run: |
+          if [ "$ENTORNO" = "produccion" ]; then REPLICAS=3; else REPLICAS=1; fi
+          echo "entorno=$ENTORNO" >> "$GITHUB_OUTPUT"
+          echo "replicas=$REPLICAS" >> "$GITHUB_OUTPUT"
+          echo "debug=$([ "$NIVEL" = "debug" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "Configuración: entorno=$ENTORNO réplicas=$REPLICAS nivel=$NIVEL"
+
+  desplegar:
+    runs-on: ubuntu-latest
+    needs: preparar
+    steps:
+      - name: Despliegue simulado
+        env:
+          ENTORNO: ${{ needs.preparar.outputs.entorno }}
+          REPLICAS: ${{ needs.preparar.outputs.replicas }}
+        run: echo "Desplegando $APP_NAME en $ENTORNO con $REPLICAS réplica(s)"
+
+      - name: Verificación previa (solo producción)
+        if: ${{ needs.preparar.outputs.entorno == 'produccion' }}
+        run: echo "Producción - se comprueba la versión y se exige aprobación antes de continuar"
+
+      - name: Detalle de depuración (solo nivel debug)
+        if: ${{ needs.preparar.outputs.debug == 'true' }}
+        run: |
+          echo "job.status=${{ job.status }}"
+          echo "runner.name=${{ runner.name }}"
+          echo "needs.preparar.result=${{ needs.preparar.result }}"
+
+      - name: Resumen final
+        if: ${{ always() }}
+        run: echo "Estado del job desplegar = ${{ job.status }}"
+
   matriz:
+    needs: preparar
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.ejecutar_matriz }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Mostrar la estrategia (sintaxis del enunciado)
+      - name: Mostrar la estrategia y la matriz
+        shell: bash
         run: |
-          echo "Sistema operativo: ${{ strategy.os }}"
-          echo "matrix.os: ${{ matrix.os }}"
+          echo "matrix.os=${{ matrix.os }}  runner.os=${{ runner.os }}"
+          echo "strategy.job-index=${{ strategy.job-index }} de ${{ strategy.job-total }}"
+          echo "strategy.fail-fast=${{ strategy.fail-fast }}  max-parallel=${{ strategy.max-parallel }}"
+
+      - name: Solo en Linux
+        if: ${{ runner.os == 'Linux' }}
+        run: echo "Kernel $(uname -r)"
+
+      - name: Solo en Windows
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: Write-Output "PowerShell $($PSVersionTable.PSVersion)"
 
   use-reusable:
     uses: ./.github/workflows/reusable-saludo.yml
