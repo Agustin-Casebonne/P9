@@ -137,4 +137,5 @@ jobs:
     needs: use-reusable
     steps:
       - name: Mostrar salida del flujo reutilizable (sintaxis del enunciado)
-        run: echo "Resultado: ${{ jobs.use-reusable.outputs.result }}"
+        run: |
+          echo "Resultado: ${{ jobs.use-reusable.outputs.result }}"
